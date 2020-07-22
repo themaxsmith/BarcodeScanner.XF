@@ -15,10 +15,10 @@ namespace GoogleVisionBarCodeScanner
 {
     public static class Configuration
     {
-        public static Android.Gms.Vision.Barcodes.BarcodeFormat BarcodeFormats = Android.Gms.Vision.Barcodes.BarcodeFormat.Code128 | Android.Gms.Vision.Barcodes.BarcodeFormat.Codabar |
-             Android.Gms.Vision.Barcodes.BarcodeFormat.Code39 | Android.Gms.Vision.Barcodes.BarcodeFormat.Code93 | Android.Gms.Vision.Barcodes.BarcodeFormat.DataMatrix |
-             Android.Gms.Vision.Barcodes.BarcodeFormat.Ean13 | Android.Gms.Vision.Barcodes.BarcodeFormat.Ean8 | Android.Gms.Vision.Barcodes.BarcodeFormat.Itf |
-             Android.Gms.Vision.Barcodes.BarcodeFormat.Pdf417 | Android.Gms.Vision.Barcodes.BarcodeFormat.QrCode | Android.Gms.Vision.Barcodes.BarcodeFormat.UpcA | Android.Gms.Vision.Barcodes.BarcodeFormat.UpcE;
+        public static int BarcodeFormats = Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatCode128 | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatCodabar |
+             Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatCode39 | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatCode93 | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatDataMatrix |
+             Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatEan13 | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatEan8 | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatItf |
+             Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatPdf417 | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatQrCode | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatUpcA | Firebase.ML.Vision.Barcode.FirebaseVisionBarcode.FormatUpcE;
         internal static bool IsScanning = true;
         internal static CameraSource CameraSource;
     }

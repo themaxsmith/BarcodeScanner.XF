@@ -2,20 +2,27 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Android.Content;
-using Android.Gms.Vision;
-using Android.Gms.Vision.Barcodes;
+using Android.Gms.Tasks;
 using Android.Graphics;
+using Android.Hardware;
 using Android.OS;
 using Android.Runtime;
 using Android.Util;
 using Android.Views;
+using Firebase.ML.Vision;
+using Firebase.ML.Vision.Barcode;
+using Firebase.ML.Vision.Common;
+using Java.Lang;
+using static Android.Views.View;
 
 namespace GoogleVisionBarCodeScanner
 {
-    internal sealed class CameraPreview : ViewGroup
+    internal sealed class CameraPreview : ViewGroup, Android.Hardware.Camera.IPreviewCallback, IOnSuccessListener
     {
-        private readonly BarcodeDetector _barcodeDetector;
-        private readonly CameraSource _cameraSource;
+
+        //Source for structure: https://firebase.google.com/docs/ml-kit/android/read-barcodes
+
+        private readonly FirebaseVisionBarcodeDetector _barcodeDetector;
         private readonly SurfaceView _surfaceView;
         private readonly IWindowManager _windowManager;
         public event Action<List<BarcodeResult>> OnDetected;
@@ -26,6 +33,9 @@ namespace GoogleVisionBarCodeScanner
             //Off the torch when exit page
             if (GoogleVisionBarCodeScanner.Methods.IsTorchOn())
                 GoogleVisionBarCodeScanner.Methods.ToggleFlashlight();
+
+
+
         }
 
 
@@ -34,79 +44,84 @@ namespace GoogleVisionBarCodeScanner
         {
             Configuration.IsScanning = startScanningOnCreate;
             _windowManager = Context.GetSystemService(Context.WindowService).JavaCast<IWindowManager>();
-            _barcodeDetector = new BarcodeDetector.Builder(context)
-               .SetBarcodeFormats(Configuration.BarcodeFormats)
-               .Build();
-            if(requestedFPS == null)
-            {
-                _cameraSource = new CameraSource
-                .Builder(context, _barcodeDetector)
-                .SetRequestedPreviewSize(1280, 720)
-                .SetAutoFocusEnabled(true)
-                .Build();
-            }
-            else
-            {
-                _cameraSource = new CameraSource
-                .Builder(context, _barcodeDetector)
-                .SetRequestedPreviewSize(1280, 720)
-                .SetAutoFocusEnabled(true)
-                .SetRequestedFps(requestedFPS.Value)
-                .Build();
-            }
+            var options = new FirebaseVisionBarcodeDetectorOptions.Builder().SetBarcodeFormats(FirebaseVisionBarcode.FormatAllFormats).Build();
             
-            Configuration.CameraSource = _cameraSource;
-            _surfaceView = new SurfaceView(context);
-            _surfaceView.Holder.AddCallback(new SurfaceHolderCallback(_cameraSource, _surfaceView));
+            _barcodeDetector = FirebaseVision.Instance
+       .GetVisionBarcodeDetector(options);
+
+            // https://github.com/jamesathey/FastAndroidCamera Used for camera access currently. hopfully can switch to camerax or camera 2
+
+            Android.Hardware.Camera camera = Android.Hardware.Camera.Open();
+            Android.Hardware.Camera.Parameters parameters = camera.GetParameters();
+
+            // snip - set resolution, frame rate, preview format, etc.
+            parameters.PictureFormat = ImageFormatType.Nv21;
+            parameters.SetPreviewSize(1920, 1080);
+            camera.SetParameters(parameters);
+
+            // assuming the SurfaceView has been set up elsewhere
+            camera.SetPreviewDisplay(_surfaceView.Holder);
+
+            int numBytes = (parameters.PreviewSize.Width * parameters.PreviewSize.Height * ImageFormat.GetBitsPerPixel(parameters.PreviewFormat)) / 8;
+
+          
+            camera.StartPreview();
+            camera.SetPreviewCallback(this);
+
+
             AddView(_surfaceView);
 
-            var detectProcessor = new DetectorProcessor(context, virbationOnDetected);
-            detectProcessor.OnDetected += DetectProcessor_OnDetected;
-            _barcodeDetector.SetProcessor(detectProcessor);
-            if (defaultTorchOn)
-                AutoSwitchOnTorch();
-        }
 
-        private static void AutoSwitchOnTorch()
+            //if (defaultTorchOn)
+            //    AutoSwitchOnTorch();
+        }
+        FirebaseVisionImageMetadata meta = new FirebaseVisionImageMetadata.Builder()
+                .SetFormat(FirebaseVisionImageMetadata.ImageFormatNv21).SetHeight(1080).SetWidth(1920).SetRotation(0).Build();
+
+        bool doProcessFrame = true;
+        public void OnPreviewFrame(byte[] data, Android.Hardware.Camera camera)
         {
-            var ts = new System.Threading.CancellationTokenSource();
-            System.Threading.CancellationToken ct = ts.Token;
-            Task.Factory.StartNew(async () =>
+            // Do per-frame video processing here
+            // TODO: Only do one frame per secound to cut down on processing
+
+            if (doProcessFrame)
             {
-                bool isTorchOn = false;
-                do
-                {
-                    try
-                    {
-                        isTorchOn = GoogleVisionBarCodeScanner.Methods.IsTorchOn();
-                        if (!isTorchOn)
-                        {
-                            //Try to switch on the torch
-                            GoogleVisionBarCodeScanner.Methods.ToggleFlashlight();
-                            //break the loop if the torch on succesfully
-                            isTorchOn = GoogleVisionBarCodeScanner.Methods.IsTorchOn();
-                            if (isTorchOn)
-                                break;
-                            else
-                            {
-                                //Wait 500ms to run the loop again
-                                await Task.Delay(500);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        //May be the view is not loaded
-                        //Wait 500ms to run the loop again
-                        await Task.Delay(500);
-                    }
-                } while (!isTorchOn);
-                //Stop the task
-                ts.Cancel();
 
+                FirebaseVisionImage image = FirebaseVisionImage.FromByteArray(data, meta);
 
-            }, ct);
+                var result = _barcodeDetector.DetectInImage(image).AddOnSuccessListener(this);
+
+            }
         }
+
+        public void OnSuccess(List<FirebaseVisionBarcode> result)
+        {
+            List<FirebaseVisionBarcode> barcodes = result;
+            List<BarcodeResult> barcodeResults = new List<BarcodeResult>();
+
+            foreach (var barcode in barcodes)
+            {
+                barcodeResults.Add(new BarcodeResult
+                {
+                    BarcodeType = BarcodeTypes.Text, // needs to get correct type
+                    DisplayValue = barcode.DisplayValue
+                }) ;
+            }
+         
+                    OnDetected?.Invoke(barcodeResults);
+                
+            
+        }
+
+
+
+
+        private void detectedBarcode()
+        {
+
+        }
+
+
 
         private void DetectProcessor_OnDetected(List<BarcodeResult> obj)
         {
@@ -122,114 +137,119 @@ namespace GoogleVisionBarCodeScanner
             _surfaceView.Measure(msw, msh);
             _surfaceView.Layout(0, 0, r - l, b - t);
 
-            SetOrientation();
+            // SetOrientation();
         }
 
-
-        public void SetOrientation()
+        public void OnSuccess(Java.Lang.Object result)
         {
-
-            Android.Hardware.Camera camera = Methods.GetCamera(_cameraSource);
-            switch (_windowManager.DefaultDisplay.Rotation)
-            {
-                case SurfaceOrientation.Rotation0:
-                    camera?.SetDisplayOrientation(90);
-                    break;
-                case SurfaceOrientation.Rotation90:
-                    camera?.SetDisplayOrientation(0);
-                    break;
-                case SurfaceOrientation.Rotation180:
-                    camera?.SetDisplayOrientation(270);
-                    break;
-                case SurfaceOrientation.Rotation270:
-                    camera?.SetDisplayOrientation(180);
-                    break;
-            }
-        }
-
-
-        private class DetectorProcessor : Java.Lang.Object, Detector.IProcessor
-        {
-            public event Action<List<BarcodeResult>> OnDetected;
-            private readonly Context _context;
-            private readonly bool _vibrationOnDetected;
-
-            public DetectorProcessor(Context context, bool vibrationOnDetected)
-            {
-                _context = context;
-                _vibrationOnDetected = vibrationOnDetected;
-            }
-
-            public void ReceiveDetections(Detector.Detections detections)
-            {
-                var qrcodes = detections.DetectedItems;
-                if (qrcodes.Size() != 0)
-                {
-                    if (Configuration.IsScanning)
-                    {
-                        Configuration.IsScanning = false;
-                        if (_vibrationOnDetected)
-                        {
-                            Vibrator vib = (Vibrator)_context.GetSystemService(Context.VibratorService);
-                            vib.Vibrate(200);
-                        }
-                        List<BarcodeResult> barcodeResults = new List<BarcodeResult>();
-                        for (int i = 0; i < qrcodes.Size(); i++)
-                        {
-                            Barcode barcode = qrcodes.ValueAt(i) as Barcode;
-                            if (barcode == null) continue;
-                            var type = Methods.ConvertBarcodeResultTypes(barcode.ValueFormat);
-                            var value = barcode.DisplayValue;
-                            barcodeResults.Add(new BarcodeResult
-                            {
-                                BarcodeType = type,
-                                DisplayValue = value
-                            });
-                        }
-                        OnDetected?.Invoke(barcodeResults);
-                    }
-                }
-            }
-
-            public void Release()
-            {
-            }
-        }
-
-        private class SurfaceHolderCallback : Java.Lang.Object, ISurfaceHolderCallback
-        {
-            private readonly SurfaceView _cameraPreview;
-            private readonly CameraSource _cameraSource;
-
-            public SurfaceHolderCallback(CameraSource cameraSource, SurfaceView cameraPreview)
-            {
-                _cameraSource = cameraSource;
-                _cameraPreview = cameraPreview;
-            }
-
-
-            public void SurfaceChanged(ISurfaceHolder holder, [GeneratedEnum] Format format, int width, int height)
-            {
-
-            }
-
-            public void SurfaceCreated(ISurfaceHolder holder)
-            {
-                try
-                {
-
-                    _cameraSource.Start(_cameraPreview.Holder);
-                }
-                catch (Exception e)
-                {
-                    Log.Error("BarcodeScanner.Droid", e.Message);
-                }
-            }
-
-            public void SurfaceDestroyed(ISurfaceHolder holder)
-            {
-                _cameraSource.Stop();
-            }
+            throw new NotImplementedException();
         }
     }
+
+   
 }
+
+
+        //public void SetOrientation()
+        //{
+
+        //    Android.Hardware.Camera camera = Methods.GetCamera(_cameraSource);
+        //    switch (_windowManager.DefaultDisplay.Rotation)
+        //    {
+        //        case SurfaceOrientation.Rotation0:
+        //            camera?.SetDisplayOrientation(90);
+        //            break;
+        //        case SurfaceOrientation.Rotation90:
+        //            camera?.SetDisplayOrientation(0);
+        //            break;
+        //        case SurfaceOrientation.Rotation180:
+        //            camera?.SetDisplayOrientation(270);
+        //            break;
+        //        case SurfaceOrientation.Rotation270:
+        //            camera?.SetDisplayOrientation(180);
+        //            break;
+        //    }
+        //}
+
+
+//        private class OnSuccessListener : Java.Lang.Object,
+//        {
+//            public event Action<List<BarcodeResult>> OnDetected;
+//            private readonly Context _context;
+//            private readonly bool _vibrationOnDetected;
+
+//            public DetectorProcessor(Context context, bool vibrationOnDetected)
+//            {
+//                _context = context;
+//                _vibrationOnDetected = vibrationOnDetected;
+//            }
+
+//            public void ReceiveDetections(Detector.Detections detections)
+//            {
+//                var qrcodes = detections.DetectedItems;
+//                if (qrcodes.Size() != 0)
+//                {
+//                    if (Configuration.IsScanning)
+//                    {
+//                        Configuration.IsScanning = false;
+//                        if (_vibrationOnDetected)
+//                        {
+//                            Vibrator vib = (Vibrator)_context.GetSystemService(Context.VibratorService);
+//                            vib.Vibrate(200);
+//                        }
+//                        List<BarcodeResult> barcodeResults = new List<BarcodeResult>();
+//                        for (int i = 0; i < qrcodes.Size(); i++)
+//                        {
+//                            Barcode barcode = qrcodes.ValueAt(i) as Barcode;
+//                            if (barcode == null) continue;
+//                            var type = Methods.ConvertBarcodeResultTypes(barcode.ValueFormat);
+//                            var value = barcode.DisplayValue;
+//                            barcodeResults.Add(new BarcodeResult
+//                            {
+//                                BarcodeType = type,
+//                                DisplayValue = value
+//                            });
+//                        }
+//                        OnDetected?.Invoke(barcodeResults);
+//                    }
+//                }
+//            }
+
+//            public void Release()
+//            {
+//            }
+//        }
+
+//        private class SurfaceHolderCallback : Java.Lang.Object, ISurfaceHolderCallback
+//        {
+//            private readonly SurfaceView _cameraPreview;
+          
+
+      
+
+
+//            public void SurfaceChanged(ISurfaceHolder holder, [GeneratedEnum] Format format, int width, int height)
+//            {
+
+//            }
+
+//            public void SurfaceCreated(ISurfaceHolder holder)
+//            {
+//                try
+//                {
+
+//                //    _cameraSource.Start(_cameraPreview.Holder);
+//                }
+//                catch (System.Exception e)
+//                {
+//                    Log.Error("BarcodeScanner.Droid", e.Message);
+//                }
+//            }
+
+//            public void SurfaceDestroyed(ISurfaceHolder holder)
+//            {
+//               // _cameraSource.Stop();
+//            }
+//        }
+//    }
+//}

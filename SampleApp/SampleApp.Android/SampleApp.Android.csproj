@@ -71,9 +71,6 @@
     <PackageReference Include="Xamarin.GooglePlayServices.Vision">
       <Version>71.1702.2</Version>
     </PackageReference>
-    <PackageReference Include="BarcodeScanner.XF">
-      <Version>4.7.0.1</Version>
-    </PackageReference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MainActivity.cs" />
@@ -114,6 +111,10 @@
     <ProjectReference Include="..\SampleApp\SampleApp.csproj">
       <Project>{D96A0F3E-5FA2-4EC5-9D9B-18C316B466D6}</Project>
       <Name>SampleApp</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\GoogleVisionBarCodeScanner\GoogleVisionBarCodeScanner.csproj">
+      <Project>{8CDA11D6-38F2-485E-9ACF-61133CCEEC7B}</Project>
+      <Name>GoogleVisionBarCodeScanner</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

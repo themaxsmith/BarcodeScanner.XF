@@ -16,9 +16,9 @@ namespace SampleApp.Droid
         {
             TabLayoutResource = Resource.Layout.Tabbar;
             ToolbarResource = Resource.Layout.Toolbar;
-
+            Firebase.FirebaseApp.InitializeApp(this);
             base.OnCreate(savedInstanceState);
-
+            
             Xamarin.Essentials.Platform.Init(this, savedInstanceState);
             GoogleVisionBarCodeScanner.Droid.RendererInitializer.Init();
             global::Xamarin.Forms.Forms.Init(this, savedInstanceState);

@@ -147,7 +147,7 @@ namespace GoogleVisionBarCodeScanner
         public static void SetSupportBarcodeFormat(BarcodeFormats barcodeFormats)
         {
             Android.Gms.Vision.Barcodes.BarcodeFormat supportFormats = Methods.ConvertBarcodeFormats(barcodeFormats);
-            Configuration.BarcodeFormats = supportFormats;
+            Configuration.BarcodeFormats = 0;
         }
 
         public static async Task<bool> AskForRequiredPermission()
@@ -170,28 +170,7 @@ namespace GoogleVisionBarCodeScanner
             return false;
         }
 
-        public static async Task<List<BarcodeResult>> ScanFromImage(byte[] imageArray)
-        {
-            BarcodeDetector detector = new BarcodeDetector.Builder(Android.App.Application.Context)
-                                        .SetBarcodeFormats(Configuration.BarcodeFormats)
-                                        .Build();
-            Bitmap bitmap = BitmapFactory.DecodeByteArray(imageArray, 0, imageArray.Length);
-            Android.Gms.Vision.Frame frame = new Android.Gms.Vision.Frame.Builder().SetBitmap(bitmap).Build();
-            SparseArray qrcodes = detector.Detect(frame);
-            List<BarcodeResult> barcodeResults = new List<BarcodeResult>();
-            for (int i = 0; i < qrcodes.Size(); i++)
-            {
-                Barcode barcode = qrcodes.ValueAt(i) as Barcode;
-                var type = Methods.ConvertBarcodeResultTypes(barcode.ValueFormat);
-                var value = barcode.DisplayValue;
-                barcodeResults.Add(new BarcodeResult
-                {
-                    BarcodeType = type,
-                    DisplayValue = value
-                });
-            }
-            return barcodeResults;
-        }
+    
 
         #endregion
     }
